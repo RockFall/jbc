@@ -3,6 +3,7 @@ import '../models/availability.dart';
 import '../models/hangout.dart';
 import '../models/idea.dart';
 import '../models/timeline_event.dart';
+import '../models/timeline_event_comment.dart';
 import 'jbc_repository.dart';
 
 /// Backend não configurado: sem sincronização (streams vazios).
@@ -22,13 +23,34 @@ class NoopRepository implements JbcRepository {
   Stream<List<TimelineEvent>> watchTimelineEvents() => Stream.value(const []);
 
   @override
+  Stream<List<TimelineEventComment>> watchTimelineEventComments(String timelineEventId) =>
+      Stream.value(const []);
+
+  @override
+  Future<void> addTimelineEventComment({
+    required String timelineEventId,
+    required JbcProfile author,
+    required String body,
+  }) async {
+    throw UnsupportedError('Configure Supabase para comentários na timeline.');
+  }
+
+  @override
+  Future<void> deleteTimelineEventComment({
+    required TimelineEventComment comment,
+    required JbcProfile deletedBy,
+  }) async {
+    throw UnsupportedError('Configure Supabase para comentários na timeline.');
+  }
+
+  @override
   Future<void> createManualTimelineEvent({
     required JbcProfile profile,
     required DateTime occurredAt,
     required String title,
     required String description,
-    List<int>? imageBytes,
-    String? imageExtension,
+    List<TimelineImageInput> images = const [],
+    int primaryImageIndex = 0,
   }) async {
     throw UnsupportedError(
       'Configure SUPABASE_URL e SUPABASE_ANON_KEY para salvar memórias.',
@@ -41,9 +63,8 @@ class NoopRepository implements JbcRepository {
     required DateTime occurredAt,
     required String title,
     required String description,
-    List<int>? newImageBytes,
-    String? newImageExtension,
-    bool removeImage = false,
+    required List<TimelineImageInput> images,
+    required int primaryImageIndex,
   }) async {
     throw UnsupportedError(
       'Configure SUPABASE_URL e SUPABASE_ANON_KEY para editar memórias.',
@@ -63,6 +84,7 @@ class NoopRepository implements JbcRepository {
     required int weekday,
     required String startTime,
     required String endTime,
+    String? title,
   }) async {
     throw UnsupportedError('Configure Supabase para indisponibilidades.');
   }
@@ -74,6 +96,7 @@ class NoopRepository implements JbcRepository {
     required int weekday,
     required String startTime,
     required String endTime,
+    String? title,
   }) async {
     throw UnsupportedError('Configure Supabase para indisponibilidades.');
   }
@@ -127,8 +150,8 @@ class NoopRepository implements JbcRepository {
     required DateTime occurredAt,
     required String title,
     required String description,
-    List<int>? imageBytes,
-    String? imageExtension,
+    List<TimelineImageInput> images = const [],
+    int primaryImageIndex = 0,
   }) async {
     throw UnsupportedError('Configure Supabase para registrar memória do rolê.');
   }
@@ -157,8 +180,22 @@ class NoopRepository implements JbcRepository {
   Future<void> updateIdeaStatus({
     required Idea existing,
     required IdeaStatus status,
+    JbcProfile? archivedBy,
   }) async {
     throw UnsupportedError('Configure Supabase para ideias.');
+  }
+
+  @override
+  Future<void> clearAllRemoteData() async {
+    throw UnsupportedError('Configure Supabase para limpar dados remotos.');
+  }
+
+  @override
+  Future<void> importTimelineEventsFromJson({
+    required JbcProfile profile,
+    required String json,
+  }) async {
+    throw UnsupportedError('Configure Supabase para importar a timeline.');
   }
 
   @override

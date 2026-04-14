@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/theme/app_theme.dart';
 import '../../core/providers.dart';
 import '../../data/repositories/noop_repository.dart';
 import '../hangouts/availability_editor_screen.dart';
@@ -110,6 +111,15 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: AppTheme.brandRed,
+        foregroundColor: Colors.white,
+        leading: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+          child: Image.asset(
+            'assets/jbc_logo_white_on_red.png',
+            fit: BoxFit.contain,
+          ),
+        ),
         title: Text(_titles[_index]),
         actions: [
           IconButton(
@@ -178,7 +188,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           NavigationDestination(
             icon: Icon(Icons.favorite_outline),
             selectedIcon: Icon(Icons.favorite),
-            label: 'Timeline',
+            label: 'Linha do Tempo',
           ),
           NavigationDestination(
             icon: Icon(Icons.event_outlined),
@@ -193,7 +203,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
 
 const _titles = <String>[
   'Cantinho de Ideias',
-  'Timeline',
+  'Linha do Tempo',
   'Rolês',
 ];
 

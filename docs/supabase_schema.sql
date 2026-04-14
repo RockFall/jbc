@@ -23,6 +23,8 @@ create table if not exists public.timeline_events (
   title text not null,
   description text not null default '',
   image_url text,
+  image_urls text[] not null default '{}',
+  primary_image_index int not null default 0,
   created_by text not null check (created_by in ('caio', 'jojo', 'bibi')),
   origin text not null check (origin in ('manual', 'from_hangout')),
   hangout_id uuid,
@@ -30,21 +32,34 @@ create table if not exists public.timeline_events (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.timeline_event_comments (
+  id uuid primary key default gen_random_uuid(),
+  timeline_event_id uuid not null references public.timeline_events(id) on delete cascade,
+  author text not null check (author in ('caio', 'jojo', 'bibi')),
+  body text not null,
+  created_at timestamptz not null default now(),
+  constraint timeline_event_comments_body_trim check (char_length(trim(body)) > 0)
+);
+
 create table if not exists public.availabilities (
   id uuid primary key default gen_random_uuid(),
   person text not null check (person in ('caio', 'jojo', 'bibi')),
   weekday int not null check (weekday >= 1 and weekday <= 7),
   start_time text not null,
-  end_time text not null
+  end_time text not null,
+  title text
 );
 
 create table if not exists public.ideas (
   id uuid primary key default gen_random_uuid(),
   title text not null,
   description text,
-  category text check (category in ('hangout', 'food', 'movie', 'series', 'travel', 'other')),
+  category text check (category in (
+    'hangout', 'cozinhaaar', 'filmin', 'series_anime', 'travel', 'hobby', 'other'
+  )),
   status text not null check (status in ('active', 'done', 'archived')),
   created_by text not null check (created_by in ('caio', 'jojo', 'bibi')),
+  archived_by text check (archived_by is null or archived_by in ('caio', 'jojo', 'bibi')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -55,6 +70,7 @@ alter table public.timeline_events enable row level security;
 alter table public.hangouts enable row level security;
 alter table public.availabilities enable row level security;
 alter table public.ideas enable row level security;
+alter table public.timeline_event_comments enable row level security;
 
 drop policy if exists "dev_allow_all_timeline_events" on public.timeline_events;
 drop policy if exists "dev_allow_all_hangouts" on public.hangouts;
@@ -63,6 +79,11 @@ drop policy if exists "dev_allow_all_ideas" on public.ideas;
 
 create policy "dev_allow_all_timeline_events"
   on public.timeline_events for all
+  using (true) with check (true);
+
+drop policy if exists "dev_allow_all_timeline_event_comments" on public.timeline_event_comments;
+create policy "dev_allow_all_timeline_event_comments"
+  on public.timeline_event_comments for all
   using (true) with check (true);
 
 create policy "dev_allow_all_hangouts"

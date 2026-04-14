@@ -7,7 +7,17 @@ import 'package:path/path.dart' as p;
 
 import '../../core/profile/jbc_profile.dart';
 import '../../core/providers.dart';
+import '../../core/theme/app_theme.dart';
 import '../../data/models/timeline_event.dart';
+
+class _ImageSlot {
+  _ImageSlot.network(this.url) : bytes = null, file = null;
+  _ImageSlot.local(this.bytes, this.file) : url = null;
+
+  final String? url;
+  final Uint8List? bytes;
+  final XFile? file;
+}
 
 class TimelineEventEditorScreen extends ConsumerStatefulWidget {
   const TimelineEventEditorScreen({super.key, this.initial});
@@ -25,9 +35,8 @@ class _TimelineEventEditorScreenState
   late final TextEditingController _titleController;
   late final TextEditingController _descriptionController;
   late DateTime _occurredDate;
-  XFile? _pickedImage;
-  Uint8List? _pickedBytes;
-  bool _removeImage = false;
+  final List<_ImageSlot> _slots = [];
+  int _primaryIndex = 0;
   bool _saving = false;
 
   bool get _isEdit => widget.initial != null;
@@ -41,6 +50,10 @@ class _TimelineEventEditorScreenState
     if (e != null) {
       final local = e.occurredAt.toLocal();
       _occurredDate = DateTime(local.year, local.month, local.day);
+      for (final u in e.imageUrls) {
+        if (u.trim().isNotEmpty) _slots.add(_ImageSlot.network(u.trim()));
+      }
+      _primaryIndex = e.primaryImageIndex.clamp(0, _slots.isEmpty ? 0 : _slots.length - 1);
     } else {
       final n = DateTime.now();
       _occurredDate = DateTime(n.year, n.month, n.day);
@@ -69,9 +82,8 @@ class _TimelineEventEditorScreenState
     if (file != null) {
       final bytes = await file.readAsBytes();
       setState(() {
-        _pickedImage = file;
-        _pickedBytes = bytes;
-        _removeImage = false;
+        _slots.add(_ImageSlot.local(bytes, file));
+        if (_slots.length == 1) _primaryIndex = 0;
       });
     }
   }
@@ -101,32 +113,38 @@ class _TimelineEventEditorScreenState
                   _pickImage(ImageSource.camera);
                 },
               ),
-              if (_isEdit &&
-                  (widget.initial!.imageUrl != null ||
-                      _pickedBytes != null))
-                ListTile(
-                  leading: Icon(
-                    Icons.hide_image_outlined,
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                  title: Text(
-                    'Remover imagem',
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    setState(() {
-                      _pickedImage = null;
-                      _pickedBytes = null;
-                      _removeImage = true;
-                    });
-                  },
-                ),
             ],
           ),
         );
       },
     );
+  }
+
+  void _removeAt(int i) {
+    setState(() {
+      _slots.removeAt(i);
+      if (_slots.isEmpty) {
+        _primaryIndex = 0;
+      } else if (_primaryIndex >= _slots.length) {
+        _primaryIndex = _slots.length - 1;
+      }
+    });
+  }
+
+  List<TimelineImageInput> _inputsForSave() {
+    final out = <TimelineImageInput>[];
+    for (final s in _slots) {
+      if (s.url != null) {
+        out.add(TimelineImageInput.existing(s.url!));
+      } else if (s.bytes != null) {
+        var ext = s.file != null
+            ? p.extension(s.file!.path).replaceFirst('.', '')
+            : 'jpg';
+        if (ext.isEmpty) ext = 'jpg';
+        out.add(TimelineImageInput.upload(s.bytes!, ext));
+      }
+    }
+    return out;
   }
 
   Future<void> _save() async {
@@ -145,16 +163,8 @@ class _TimelineEventEditorScreenState
       final title = _titleController.text.trim();
       final description = _descriptionController.text.trim();
       final occurred = _occurredAtForSave();
-
-      List<int>? bytes;
-      String? ext;
-      if (_pickedBytes != null) {
-        bytes = _pickedBytes;
-        ext = _pickedImage != null
-            ? p.extension(_pickedImage!.path).replaceFirst('.', '')
-            : 'jpg';
-        if (ext.isEmpty) ext = 'jpg';
-      }
+      final inputs = _inputsForSave();
+      final pIdx = _slots.isEmpty ? 0 : _primaryIndex.clamp(0, _slots.length - 1);
 
       if (_isEdit) {
         await repo.updateTimelineEvent(
@@ -162,9 +172,8 @@ class _TimelineEventEditorScreenState
           occurredAt: occurred,
           title: title,
           description: description,
-          newImageBytes: bytes,
-          newImageExtension: ext,
-          removeImage: _removeImage,
+          images: inputs,
+          primaryImageIndex: pIdx,
         );
       } else {
         await repo.createManualTimelineEvent(
@@ -172,8 +181,8 @@ class _TimelineEventEditorScreenState
           occurredAt: occurred,
           title: title,
           description: description,
-          imageBytes: bytes,
-          imageExtension: ext,
+          images: inputs,
+          primaryImageIndex: pIdx,
         );
       }
 
@@ -234,33 +243,81 @@ class _TimelineEventEditorScreenState
     }
   }
 
-  Widget _buildImagePreview() {
-    if (_pickedBytes != null) {
-      return Image.memory(
-        _pickedBytes!,
+  Widget _thumb(BuildContext context, _ImageSlot s, int index) {
+    final isPrimary = _slots.isNotEmpty && index == _primaryIndex;
+    Widget image;
+    if (s.bytes != null) {
+      image = Image.memory(s.bytes!, fit: BoxFit.cover);
+    } else if (s.url != null) {
+      image = Image.network(
+        s.url!,
         fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) =>
+            const Icon(Icons.broken_image_outlined),
       );
+    } else {
+      image = const SizedBox.shrink();
     }
-    final url = (!_removeImage) ? widget.initial?.imageUrl : null;
-    if (url != null && url.isNotEmpty) {
-      return Image.network(
-        url,
-        fit: BoxFit.cover,
-        loadingBuilder: (context, child, progress) {
-          if (progress == null) return child;
-          return const Center(child: CircularProgressIndicator());
-        },
-        errorBuilder: (context, error, stackTrace) => const Center(
-          child: Icon(Icons.broken_image_outlined, size: 48),
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Material(
+          borderRadius: BorderRadius.circular(12),
+          clipBehavior: Clip.antiAlias,
+          child: SizedBox(
+            width: 96,
+            height: 96,
+            child: image,
+          ),
         ),
-      );
-    }
-    return Center(
-      child: Icon(
-        Icons.add_a_photo_outlined,
-        size: 48,
-        color: Theme.of(context).colorScheme.outline,
-      ),
+        Positioned(
+          top: 4,
+          right: 4,
+          child: Material(
+            color: Colors.black54,
+            shape: const CircleBorder(),
+            child: IconButton(
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              icon: const Icon(Icons.close, color: Colors.white, size: 18),
+              onPressed: _saving ? null : () => _removeAt(index),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: 4,
+          left: 4,
+          child: Material(
+            color: isPrimary
+                ? Theme.of(context).colorScheme.primary
+                : Colors.black45,
+            borderRadius: BorderRadius.circular(20),
+            child: InkWell(
+              onTap: _saving ? null : () => setState(() => _primaryIndex = index),
+              borderRadius: BorderRadius.circular(20),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isPrimary ? Icons.star : Icons.star_outline,
+                      size: 14,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      isPrimary ? 'Principal' : 'Capa',
+                      style: const TextStyle(color: Colors.white, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -275,9 +332,6 @@ class _TimelineEventEditorScreenState
   @override
   Widget build(BuildContext context) {
     final initial = widget.initial;
-    final existingUrl = initial?.imageUrl;
-    final hasVisualImage = _pickedBytes != null ||
-        (!_removeImage && existingUrl != null && existingUrl.isNotEmpty);
 
     return Scaffold(
       appBar: AppBar(
@@ -289,12 +343,16 @@ class _TimelineEventEditorScreenState
               onPressed: _saving ? null : _confirmDelete,
             ),
           TextButton(
+            style: AppTheme.appBarActionTextButtonStyle,
             onPressed: _saving ? null : _save,
             child: _saving
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.appBarOnBrandForeground,
+                    ),
                   )
                 : const Text('Salvar'),
           ),
@@ -365,29 +423,46 @@ class _TimelineEventEditorScreenState
             ),
             const SizedBox(height: 20),
             Text(
-              'Foto (opcional)',
+              'Fotos (opcional)',
               style: Theme.of(context).textTheme.titleSmall,
             ),
-            const SizedBox(height: 8),
-            AspectRatio(
-              aspectRatio: 16 / 10,
-              child: Material(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: _saving ? null : _showImageSourceSheet,
-                  child: _buildImagePreview(),
-                ),
+            const SizedBox(height: 4),
+            Text(
+              'Toque na estrela para definir a foto principal na linha do tempo.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 112,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _slots.length + 1,
+                separatorBuilder: (context, index) => const SizedBox(width: 10),
+                itemBuilder: (context, i) {
+                  if (i == _slots.length) {
+                    return Material(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        onTap: _saving ? null : _showImageSourceSheet,
+                        borderRadius: BorderRadius.circular(12),
+                        child: const SizedBox(
+                          width: 96,
+                          height: 96,
+                          child: Icon(Icons.add_photo_alternate_outlined, size: 40),
+                        ),
+                      ),
+                    );
+                  }
+                  return _thumb(context, _slots[i], i);
+                },
               ),
             ),
             const SizedBox(height: 8),
             TextButton.icon(
               onPressed: _saving ? null : _showImageSourceSheet,
               icon: const Icon(Icons.add_photo_alternate_outlined),
-              label: Text(
-                hasVisualImage ? 'Trocar foto' : 'Adicionar foto',
-              ),
+              label: const Text('Adicionar foto'),
             ),
             if (_isEdit && initial != null) ...[
               const SizedBox(height: 24),

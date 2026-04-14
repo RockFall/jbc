@@ -6,7 +6,17 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/providers.dart';
+import '../../core/theme/app_theme.dart';
 import '../../data/models/hangout.dart';
+import '../../data/models/timeline_event.dart';
+import 'hangouts_format.dart';
+
+class _ImageSlot {
+  _ImageSlot.local(this.bytes, this.file);
+
+  final Uint8List bytes;
+  final XFile file;
+}
 
 class HangoutMemoryScreen extends ConsumerStatefulWidget {
   const HangoutMemoryScreen({super.key, required this.hangout});
@@ -22,8 +32,8 @@ class _HangoutMemoryScreenState extends ConsumerState<HangoutMemoryScreen> {
   late final TextEditingController _titleController;
   late final TextEditingController _descriptionController;
   late DateTime _occurredDate;
-  XFile? _pickedImage;
-  Uint8List? _pickedBytes;
+  final List<_ImageSlot> _slots = [];
+  int _primaryIndex = 0;
   bool _saving = false;
 
   static String _descFromHangout(Hangout h) {
@@ -67,8 +77,8 @@ class _HangoutMemoryScreenState extends ConsumerState<HangoutMemoryScreen> {
     if (file != null) {
       final bytes = await file.readAsBytes();
       setState(() {
-        _pickedImage = file;
-        _pickedBytes = bytes;
+        _slots.add(_ImageSlot.local(bytes, file));
+        if (_slots.length == 1) _primaryIndex = 0;
       });
     }
   }
@@ -98,29 +108,35 @@ class _HangoutMemoryScreenState extends ConsumerState<HangoutMemoryScreen> {
                   _pickImage(ImageSource.camera);
                 },
               ),
-              if (_pickedBytes != null)
-                ListTile(
-                  leading: Icon(
-                    Icons.hide_image_outlined,
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                  title: Text(
-                    'Remover foto',
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    setState(() {
-                      _pickedImage = null;
-                      _pickedBytes = null;
-                    });
-                  },
-                ),
             ],
           ),
         );
       },
     );
+  }
+
+  void _removeAt(int i) {
+    setState(() {
+      _slots.removeAt(i);
+      if (_slots.isEmpty) {
+        _primaryIndex = 0;
+      } else if (_primaryIndex >= _slots.length) {
+        _primaryIndex = _slots.length - 1;
+      }
+    });
+  }
+
+  String _extFor(XFile file) {
+    var ext = p.extension(file.path).replaceFirst('.', '');
+    if (ext.isEmpty) ext = 'jpg';
+    return ext;
+  }
+
+  List<TimelineImageInput> _inputsForSave() {
+    return [
+      for (final s in _slots)
+        TimelineImageInput.upload(s.bytes, _extFor(s.file)),
+    ];
   }
 
   Future<void> _save() async {
@@ -144,15 +160,8 @@ class _HangoutMemoryScreenState extends ConsumerState<HangoutMemoryScreen> {
 
     setState(() => _saving = true);
     try {
-      List<int>? bytes;
-      String? ext;
-      if (_pickedBytes != null) {
-        bytes = _pickedBytes;
-        ext = _pickedImage != null
-            ? p.extension(_pickedImage!.path).replaceFirst('.', '')
-            : 'jpg';
-        if (ext.isEmpty) ext = 'jpg';
-      }
+      final inputs = _inputsForSave();
+      final pIdx = _slots.isEmpty ? 0 : _primaryIndex.clamp(0, _slots.length - 1);
 
       await ref.read(repositoryProvider).createTimelineFromHangout(
             hangout: h,
@@ -160,8 +169,8 @@ class _HangoutMemoryScreenState extends ConsumerState<HangoutMemoryScreen> {
             occurredAt: _occurredAtForSave(),
             title: _titleController.text.trim(),
             description: _descriptionController.text.trim(),
-            imageBytes: bytes,
-            imageExtension: ext,
+            images: inputs,
+            primaryImageIndex: pIdx,
           );
       ref.invalidate(timelineEventsProvider);
       ref.invalidate(hangoutsProvider);
@@ -180,16 +189,68 @@ class _HangoutMemoryScreenState extends ConsumerState<HangoutMemoryScreen> {
     }
   }
 
-  Widget _buildImagePreview() {
-    if (_pickedBytes != null) {
-      return Image.memory(_pickedBytes!, fit: BoxFit.cover);
-    }
-    return Center(
-      child: Icon(
-        Icons.add_a_photo_outlined,
-        size: 48,
-        color: Theme.of(context).colorScheme.outline,
-      ),
+  Widget _thumb(BuildContext context, _ImageSlot s, int index) {
+    final isPrimary = _slots.isNotEmpty && index == _primaryIndex;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Material(
+          borderRadius: BorderRadius.circular(12),
+          clipBehavior: Clip.antiAlias,
+          child: SizedBox(
+            width: 96,
+            height: 96,
+            child: Image.memory(s.bytes, fit: BoxFit.cover),
+          ),
+        ),
+        Positioned(
+          top: 4,
+          right: 4,
+          child: Material(
+            color: Colors.black54,
+            shape: const CircleBorder(),
+            child: IconButton(
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              icon: const Icon(Icons.close, color: Colors.white, size: 18),
+              onPressed: _saving ? null : () => _removeAt(index),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: 4,
+          left: 4,
+          child: Material(
+            color: isPrimary
+                ? Theme.of(context).colorScheme.primary
+                : Colors.black45,
+            borderRadius: BorderRadius.circular(20),
+            child: InkWell(
+              onTap: _saving ? null : () => setState(() => _primaryIndex = index),
+              borderRadius: BorderRadius.circular(20),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isPrimary ? Icons.star : Icons.star_outline,
+                      size: 14,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      isPrimary ? 'Principal' : 'Capa',
+                      style: const TextStyle(color: Colors.white, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -215,12 +276,16 @@ class _HangoutMemoryScreenState extends ConsumerState<HangoutMemoryScreen> {
         title: const Text('Memória do rolê'),
         actions: [
           TextButton(
+            style: AppTheme.appBarActionTextButtonStyle,
             onPressed: _saving ? null : _save,
             child: _saving
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.appBarOnBrandForeground,
+                    ),
                   )
                 : const Text('Salvar'),
           ),
@@ -237,7 +302,7 @@ class _HangoutMemoryScreenState extends ConsumerState<HangoutMemoryScreen> {
           ),
           children: [
             Text(
-              'Ajuste o texto e a foto antes de salvar. O vínculo com o rolê é automático.',
+              'Ajuste o texto e as fotos antes de salvar. O vínculo com o rolê é automático.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
@@ -245,7 +310,7 @@ class _HangoutMemoryScreenState extends ConsumerState<HangoutMemoryScreen> {
               contentPadding: EdgeInsets.zero,
               title: const Text('Quando aconteceu'),
               subtitle: Text(
-                MaterialLocalizations.of(context).formatFullDate(_occurredDate),
+                formatHangoutDateRelativePt(_occurredDate),
               ),
               trailing: const Icon(Icons.calendar_today_outlined),
               onTap: _saving
@@ -286,27 +351,41 @@ class _HangoutMemoryScreenState extends ConsumerState<HangoutMemoryScreen> {
             ),
             const SizedBox(height: 20),
             Text(
-              'Foto (opcional)',
+              'Fotos (opcional)',
               style: Theme.of(context).textTheme.titleSmall,
             ),
             const SizedBox(height: 8),
-            AspectRatio(
-              aspectRatio: 16 / 10,
-              child: Material(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: _saving ? null : _showImageSourceSheet,
-                  child: _buildImagePreview(),
-                ),
+            SizedBox(
+              height: 112,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _slots.length + 1,
+                separatorBuilder: (context, index) => const SizedBox(width: 10),
+                itemBuilder: (context, i) {
+                  if (i == _slots.length) {
+                    return Material(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        onTap: _saving ? null : _showImageSourceSheet,
+                        borderRadius: BorderRadius.circular(12),
+                        child: const SizedBox(
+                          width: 96,
+                          height: 96,
+                          child: Icon(Icons.add_photo_alternate_outlined, size: 40),
+                        ),
+                      ),
+                    );
+                  }
+                  return _thumb(context, _slots[i], i);
+                },
               ),
             ),
             const SizedBox(height: 8),
             TextButton.icon(
               onPressed: _saving ? null : _showImageSourceSheet,
               icon: const Icon(Icons.add_photo_alternate_outlined),
-              label: Text(_pickedBytes != null ? 'Trocar foto' : 'Adicionar foto'),
+              label: const Text('Adicionar foto'),
             ),
           ],
         ),

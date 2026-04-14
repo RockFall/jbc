@@ -4,10 +4,10 @@ import 'package:intl/intl.dart';
 
 import '../../core/hangout_conflict.dart';
 import '../../core/profile/jbc_profile.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/providers.dart';
 import '../../data/models/hangout.dart';
 import '../../data/models/idea.dart';
-import '../ideas/ideas_labels.dart';
 import 'hangout_memory_screen.dart';
 import 'hangouts_format.dart';
 
@@ -34,7 +34,6 @@ class _HangoutEditorScreenState extends ConsumerState<HangoutEditorScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _titleController;
   late final TextEditingController _descriptionController;
-  late final TextEditingController _notesController;
   late DateTime _date;
   late TimeOfDay _start;
   TimeOfDay? _end;
@@ -52,7 +51,6 @@ class _HangoutEditorScreenState extends ConsumerState<HangoutEditorScreen> {
     if (h != null) {
       _titleController = TextEditingController(text: h.title);
       _descriptionController = TextEditingController(text: h.description ?? '');
-      _notesController = TextEditingController(text: h.notes ?? '');
       final d = h.date.toLocal();
       _date = DateTime(d.year, d.month, d.day);
       _start = parseTimeHhMm(h.startTime);
@@ -62,10 +60,6 @@ class _HangoutEditorScreenState extends ConsumerState<HangoutEditorScreen> {
     } else if (idea != null) {
       _titleController = TextEditingController(text: idea.title);
       _descriptionController = TextEditingController(text: idea.description ?? '');
-      final note = idea.category != null
-          ? 'Ideia · ${ideaCategoryLabelPt(idea.category!)}'
-          : '';
-      _notesController = TextEditingController(text: note);
       final n = DateTime.now();
       _date = DateTime(n.year, n.month, n.day);
       _start = const TimeOfDay(hour: 18, minute: 0);
@@ -73,7 +67,6 @@ class _HangoutEditorScreenState extends ConsumerState<HangoutEditorScreen> {
     } else {
       _titleController = TextEditingController();
       _descriptionController = TextEditingController();
-      _notesController = TextEditingController();
       final n = DateTime.now();
       _date = DateTime(n.year, n.month, n.day);
       _start = const TimeOfDay(hour: 18, minute: 0);
@@ -85,7 +78,6 @@ class _HangoutEditorScreenState extends ConsumerState<HangoutEditorScreen> {
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
-    _notesController.dispose();
     super.dispose();
   }
 
@@ -135,9 +127,7 @@ class _HangoutEditorScreenState extends ConsumerState<HangoutEditorScreen> {
       final repo = ref.read(repositoryProvider);
       final title = _titleController.text.trim();
       final description = _descriptionController.text.trim();
-      final notes = _notesController.text.trim();
       final desc = description.isEmpty ? null : description;
-      final nts = notes.isEmpty ? null : notes;
 
       if (_isEdit) {
         await repo.updateHangout(
@@ -147,7 +137,7 @@ class _HangoutEditorScreenState extends ConsumerState<HangoutEditorScreen> {
           date: _date,
           startTime: startStr,
           endTime: endStr,
-          notes: nts,
+          notes: _h!.notes,
         );
       } else {
         await repo.createHangout(
@@ -157,7 +147,7 @@ class _HangoutEditorScreenState extends ConsumerState<HangoutEditorScreen> {
           date: _date,
           startTime: startStr,
           endTime: endStr,
-          notes: nts,
+          notes: null,
         );
         final fromIdea = widget.prefillFromIdea;
         if (fromIdea != null && mounted) {
@@ -308,12 +298,16 @@ class _HangoutEditorScreenState extends ConsumerState<HangoutEditorScreen> {
         actions: [
           if (!cancelled)
             TextButton(
+              style: AppTheme.appBarActionTextButtonStyle,
               onPressed: _saving ? null : _save,
               child: _saving
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.appBarOnBrandForeground,
+                      ),
                     )
                   : const Text('Salvar'),
             ),
@@ -402,29 +396,41 @@ class _HangoutEditorScreenState extends ConsumerState<HangoutEditorScreen> {
               trailing: const Icon(Icons.calendar_today_outlined),
               onTap: cancelled || _saving ? null : _pickDate,
             ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Início'),
-              subtitle: Text(startStr),
-              trailing: const Icon(Icons.schedule),
-              onTap: cancelled || _saving ? null : _pickStart,
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Fim (opcional)'),
-              subtitle: Text(endStr ?? 'Não definido — conflitos usam 1 h a partir do início'),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_end != null)
-                    IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: cancelled || _saving ? null : () => setState(() => _end = null),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Início'),
+                    subtitle: Text(startStr),
+                    trailing: const Icon(Icons.schedule),
+                    onTap: cancelled || _saving ? null : _pickStart,
+                  ),
+                ),
+                Expanded(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Fim (opcional)'),
+                    subtitle: Text(
+                      endStr ?? 'Não definido — conflitos usam 1 h a partir do início',
                     ),
-                  const Icon(Icons.schedule),
-                ],
-              ),
-              onTap: cancelled || _saving ? null : _pickEnd,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_end != null)
+                          IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed:
+                                cancelled || _saving ? null : () => setState(() => _end = null),
+                          ),
+                        const Icon(Icons.schedule),
+                      ],
+                    ),
+                    onTap: cancelled || _saving ? null : _pickEnd,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             TextFormField(
@@ -447,17 +453,6 @@ class _HangoutEditorScreenState extends ConsumerState<HangoutEditorScreen> {
               ),
               textCapitalization: TextCapitalization.sentences,
               maxLines: 3,
-              readOnly: cancelled,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _notesController,
-              decoration: const InputDecoration(
-                labelText: 'Observações (opcional)',
-                border: OutlineInputBorder(),
-              ),
-              textCapitalization: TextCapitalization.sentences,
-              maxLines: 2,
               readOnly: cancelled,
             ),
             if (_isEdit && !cancelled) ...[

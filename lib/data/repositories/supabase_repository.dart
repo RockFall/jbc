@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:mime/mime.dart';
@@ -9,6 +10,7 @@ import '../models/availability.dart';
 import '../models/hangout.dart';
 import '../models/idea.dart';
 import '../models/timeline_event.dart';
+import '../models/timeline_event_comment.dart';
 import 'jbc_repository.dart';
 import 'timeline_storage_paths.dart';
 
@@ -31,27 +33,73 @@ class SupabaseRepository implements JbcRepository {
   }
 
   @override
+  Stream<List<TimelineEventComment>> watchTimelineEventComments(
+    String timelineEventId,
+  ) {
+    return _client
+        .from('timeline_event_comments')
+        .stream(primaryKey: ['id'])
+        .map((rows) {
+          final list = rows
+              .where((r) => r['timeline_event_id'] == timelineEventId)
+              .map(TimelineEventComment.fromRow)
+              .toList()
+            ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          return list;
+        });
+  }
+
+  @override
+  Future<void> addTimelineEventComment({
+    required String timelineEventId,
+    required JbcProfile author,
+    required String body,
+  }) async {
+    final trimmed = body.trim();
+    if (trimmed.isEmpty) return;
+    final now = DateTime.now().toUtc();
+    await _client.from('timeline_event_comments').insert({
+      'id': _uuid.v4(),
+      'timeline_event_id': timelineEventId,
+      'author': author.storageKey,
+      'body': trimmed,
+      'created_at': now.toIso8601String(),
+    });
+  }
+
+  @override
+  Future<void> deleteTimelineEventComment({
+    required TimelineEventComment comment,
+    required JbcProfile deletedBy,
+  }) async {
+    if (comment.author != deletedBy.storageKey) {
+      throw StateError('Só é possível apagar o próprio comentário.');
+    }
+    await _client.from('timeline_event_comments').delete().eq('id', comment.id);
+  }
+
+  @override
   Future<void> createManualTimelineEvent({
     required JbcProfile profile,
     required DateTime occurredAt,
     required String title,
     required String description,
-    List<int>? imageBytes,
-    String? imageExtension,
+    List<TimelineImageInput> images = const [],
+    int primaryImageIndex = 0,
   }) async {
     final id = _uuid.v4();
     final now = DateTime.now().toUtc();
-    String? imageUrl;
-    if (imageBytes != null && imageBytes.isNotEmpty) {
-      final ext = (imageExtension ?? 'jpg').toLowerCase();
-      imageUrl = await _uploadTimelineCover(id, imageBytes, ext);
-    }
+    final urls = await _resolveTimelineImageUrls(eventId: id, inputs: images);
+    final p = _clampPrimaryIndex(primaryImageIndex, urls.length);
+    final cover = urls.isEmpty ? null : urls[p];
     await _client.from('timeline_events').insert({
       'id': id,
       'occurred_at': occurredAt.toUtc().toIso8601String(),
       'title': title,
       'description': description,
-      'image_url': imageUrl,
+      'image_url': cover,
+      'image_urls': urls,
+      'primary_image_index': p,
       'created_by': profile.storageKey,
       'origin': 'manual',
       'hangout_id': null,
@@ -66,48 +114,93 @@ class SupabaseRepository implements JbcRepository {
     required DateTime occurredAt,
     required String title,
     required String description,
-    List<int>? newImageBytes,
-    String? newImageExtension,
-    bool removeImage = false,
+    required List<TimelineImageInput> images,
+    required int primaryImageIndex,
   }) async {
     final now = DateTime.now().toUtc();
-    String? imageUrl = existing.imageUrl;
-    if (newImageBytes != null && newImageBytes.isNotEmpty) {
-      await _deleteTimelineImageIfExists(existing.imageUrl);
-      final ext = (newImageExtension ?? 'jpg').toLowerCase();
-      imageUrl = await _uploadTimelineCover(existing.id, newImageBytes, ext);
-    } else if (removeImage) {
-      await _deleteTimelineImageIfExists(existing.imageUrl);
-      imageUrl = null;
-    }
+    final urls = await _resolveTimelineImageUrls(
+      eventId: existing.id,
+      inputs: images,
+    );
+    final p = _clampPrimaryIndex(primaryImageIndex, urls.length);
+    final cover = urls.isEmpty ? null : urls[p];
+    await _removeOrphanTimelineImages(
+      previous: existing.imageUrls,
+      kept: urls,
+    );
     await _client.from('timeline_events').update({
       'occurred_at': occurredAt.toUtc().toIso8601String(),
       'title': title,
       'description': description,
-      'image_url': imageUrl,
+      'image_url': cover,
+      'image_urls': urls,
+      'primary_image_index': p,
       'updated_at': now.toIso8601String(),
     }).eq('id', existing.id);
   }
 
   @override
   Future<void> deleteTimelineEvent(TimelineEvent event) async {
-    await _deleteTimelineImageIfExists(event.imageUrl);
+    for (final u in event.imageUrls) {
+      await _deleteTimelineImageIfExists(u);
+    }
     await _client.from('timeline_events').delete().eq('id', event.id);
   }
 
-  Future<String> _uploadTimelineCover(
+  int _clampPrimaryIndex(int primary, int length) {
+    if (length <= 0) return 0;
+    if (primary < 0) return 0;
+    if (primary >= length) return length - 1;
+    return primary;
+  }
+
+  Future<List<String>> _resolveTimelineImageUrls({
+    required String eventId,
+    required List<TimelineImageInput> inputs,
+  }) async {
+    final out = <String>[];
+    for (final input in inputs) {
+      final url = input.existingPublicUrl?.trim();
+      if (url != null && url.isNotEmpty) {
+        out.add(url);
+      } else if (input.isUpload) {
+        final ext = (input.fileExtension ?? 'jpg').toLowerCase();
+        final uploaded = await _uploadTimelineImage(
+          eventId,
+          input.bytes!,
+          ext,
+        );
+        out.add(uploaded);
+      }
+    }
+    return out;
+  }
+
+  Future<void> _removeOrphanTimelineImages({
+    required List<String> previous,
+    required List<String> kept,
+  }) async {
+    for (final u in previous) {
+      if (!kept.contains(u)) {
+        await _deleteTimelineImageIfExists(u);
+      }
+    }
+  }
+
+  Future<String> _uploadTimelineImage(
     String eventId,
     List<int> bytes,
     String ext,
   ) async {
-    final path = timelineCoverObjectPath(eventId, ext);
+    final objectId = _uuid.v4();
+    final path = timelineImageObjectPath(eventId, objectId, ext);
     final contentType = lookupMimeType('file.$ext') ?? 'image/jpeg';
     await _client.storage.from(kTimelineImagesBucket).uploadBinary(
           path,
           Uint8List.fromList(bytes),
           fileOptions: FileOptions(
             contentType: contentType,
-            upsert: true,
+            upsert: false,
           ),
         );
     return _client.storage.from(kTimelineImagesBucket).getPublicUrl(path);
@@ -164,13 +257,16 @@ class SupabaseRepository implements JbcRepository {
     required int weekday,
     required String startTime,
     required String endTime,
+    String? title,
   }) async {
+    final t = title?.trim();
     await _client.from('availabilities').insert({
       'id': _uuid.v4(),
       'person': profile.storageKey,
       'weekday': weekday,
       'start_time': startTime,
       'end_time': endTime,
+      if (t != null && t.isNotEmpty) 'title': t,
     });
   }
 
@@ -181,14 +277,17 @@ class SupabaseRepository implements JbcRepository {
     required int weekday,
     required String startTime,
     required String endTime,
+    String? title,
   }) async {
     if (existing.person != profile.storageKey) {
       throw StateError('Só é possível editar as suas indisponibilidades.');
     }
+    final t = title?.trim();
     await _client.from('availabilities').update({
       'weekday': weekday,
       'start_time': startTime,
       'end_time': endTime,
+      'title': (t == null || t.isEmpty) ? null : t,
     }).eq('id', existing.id);
   }
 
@@ -274,8 +373,8 @@ class SupabaseRepository implements JbcRepository {
     required DateTime occurredAt,
     required String title,
     required String description,
-    List<int>? imageBytes,
-    String? imageExtension,
+    List<TimelineImageInput> images = const [],
+    int primaryImageIndex = 0,
   }) async {
     if (hangout.status != HangoutStatus.happened) {
       throw StateError('Marque o rolê como aconteceu antes de registrar a memória.');
@@ -285,17 +384,17 @@ class SupabaseRepository implements JbcRepository {
     }
     final eventId = _uuid.v4();
     final now = DateTime.now().toUtc();
-    String? imageUrl;
-    if (imageBytes != null && imageBytes.isNotEmpty) {
-      final ext = (imageExtension ?? 'jpg').toLowerCase();
-      imageUrl = await _uploadTimelineCover(eventId, imageBytes, ext);
-    }
+    final urls = await _resolveTimelineImageUrls(eventId: eventId, inputs: images);
+    final p = _clampPrimaryIndex(primaryImageIndex, urls.length);
+    final cover = urls.isEmpty ? null : urls[p];
     await _client.from('timeline_events').insert({
       'id': eventId,
       'occurred_at': occurredAt.toUtc().toIso8601String(),
       'title': title,
       'description': description,
-      'image_url': imageUrl,
+      'image_url': cover,
+      'image_urls': urls,
+      'primary_image_index': p,
       'created_by': profile.storageKey,
       'origin': 'from_hangout',
       'hangout_id': hangout.id,
@@ -360,12 +459,53 @@ class SupabaseRepository implements JbcRepository {
   Future<void> updateIdeaStatus({
     required Idea existing,
     required IdeaStatus status,
+    JbcProfile? archivedBy,
   }) async {
     final now = DateTime.now().toUtc();
+    final archivedKey =
+        status == IdeaStatus.archived ? archivedBy?.storageKey : null;
     await _client.from('ideas').update({
       'status': status.dbValue,
+      'archived_by': archivedKey,
       'updated_at': now.toIso8601String(),
     }).eq('id', existing.id);
+  }
+
+  @override
+  Future<void> clearAllRemoteData() async {
+    const epoch = '1970-01-01T00:00:00Z';
+    await _client.from('timeline_event_comments').delete().gte('created_at', epoch);
+    await _client.from('timeline_events').delete().gte('created_at', epoch);
+    await _client.from('hangouts').delete().gte('created_at', epoch);
+    await _client.from('ideas').delete().gte('created_at', epoch);
+    await _client.from('availabilities').delete().gte('weekday', 1);
+  }
+
+  @override
+  Future<void> importTimelineEventsFromJson({
+    required JbcProfile profile,
+    required String json,
+  }) async {
+    final decoded = jsonDecode(json);
+    if (decoded is! List) {
+      throw FormatException('JSON da timeline deve ser uma lista.');
+    }
+    for (final raw in decoded) {
+      if (raw is! Map) continue;
+      final m = Map<String, dynamic>.from(raw);
+      final dateStr = m['date'] as String?;
+      final title = (m['title'] as String?)?.trim() ?? '';
+      if (dateStr == null || dateStr.isEmpty) continue;
+      final desc = (m['description'] as String?) ?? '';
+      final d = DateTime.tryParse('${dateStr}T12:00:00');
+      if (d == null) continue;
+      await createManualTimelineEvent(
+        profile: profile,
+        occurredAt: d,
+        title: title.isEmpty ? '(sem título)' : title,
+        description: desc,
+      );
+    }
   }
 
   @override
@@ -381,6 +521,8 @@ class SupabaseRepository implements JbcRepository {
       'occurred_at': now.toIso8601String(),
       'title': 'Memória de exemplo',
       'description': 'Adicionada para testar a sincronização.',
+      'image_urls': <String>[],
+      'primary_image_index': 0,
       'created_by': profile.storageKey,
       'origin': 'manual',
       'created_at': now.toIso8601String(),

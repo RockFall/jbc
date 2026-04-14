@@ -22,8 +22,13 @@ class IdeaDetailScreen extends ConsumerWidget {
     final updated = DateFormat('dd/MM/yyyy HH:mm').format(idea.updatedAt.toLocal());
 
     Future<void> setStatus(IdeaStatus s) async {
+      final me = ref.read(userProfileProvider);
       try {
-        await ref.read(repositoryProvider).updateIdeaStatus(existing: idea, status: s);
+        await ref.read(repositoryProvider).updateIdeaStatus(
+              existing: idea,
+              status: s,
+              archivedBy: s == IdeaStatus.archived ? me : null,
+            );
         ref.invalidate(ideasProvider);
         if (context.mounted) {
           Navigator.of(context).pop();
@@ -92,6 +97,52 @@ class IdeaDetailScreen extends ConsumerWidget {
       }
     }
 
+    final actions = <Widget>[];
+
+    if (idea.status == IdeaStatus.active) {
+      actions.addAll([
+        FilledButton.tonalIcon(
+          onPressed: transformToHangout,
+          icon: const Icon(Icons.event_outlined),
+          label: const Text('Transformar em rolê'),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: () => setStatus(IdeaStatus.done),
+          icon: const Icon(Icons.check_circle_outline),
+          label: const Text('Marcar como realizada'),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => setStatus(IdeaStatus.archived),
+          icon: const Icon(Icons.sentiment_dissatisfied_outlined),
+          label: const Text('Odiei'),
+        ),
+      ]);
+    } else if (idea.status == IdeaStatus.done) {
+      actions.addAll([
+        OutlinedButton.icon(
+          onPressed: () => setStatus(IdeaStatus.archived),
+          icon: const Icon(Icons.sentiment_dissatisfied_outlined),
+          label: const Text('Odiei'),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => setStatus(IdeaStatus.active),
+          icon: const Icon(Icons.restore_outlined),
+          label: const Text('Reativar'),
+        ),
+      ]);
+    } else {
+      actions.add(
+        OutlinedButton.icon(
+          onPressed: () => setStatus(IdeaStatus.active),
+          icon: const Icon(Icons.unarchive_outlined),
+          label: const Text('Reativar'),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Ideia'),
@@ -148,6 +199,18 @@ class IdeaDetailScreen extends ConsumerWidget {
               color: theme.colorScheme.primary,
             ),
           ),
+          if (idea.status == IdeaStatus.archived) ...[
+            const SizedBox(height: 6),
+            Text(
+              idea.archivedBy != null && idea.archivedBy!.isNotEmpty
+                  ? 'Odiado por: ${JbcProfile.displayNameForStorageKey(idea.archivedBy!)}'
+                  : 'Odiado por: —',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.tertiary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
           Text(
             'Criada em $created · Atualizada $updated',
             style: theme.textTheme.labelSmall?.copyWith(
@@ -161,45 +224,17 @@ class IdeaDetailScreen extends ConsumerWidget {
               style: theme.textTheme.bodyLarge,
             ),
           ],
-          const SizedBox(height: 28),
-          if (idea.status == IdeaStatus.active) ...[
-            FilledButton.tonalIcon(
-              onPressed: transformToHangout,
-              icon: const Icon(Icons.event_outlined),
-              label: const Text('Transformar em rolê'),
+          const SizedBox(height: 32),
+          Align(
+            alignment: Alignment.center,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 340),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: actions,
+              ),
             ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: () => setStatus(IdeaStatus.done),
-              icon: const Icon(Icons.check_circle_outline),
-              label: const Text('Marcar como realizada'),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: () => setStatus(IdeaStatus.archived),
-              icon: const Icon(Icons.archive_outlined),
-              label: const Text('Arquivar'),
-            ),
-          ],
-          if (idea.status == IdeaStatus.done) ...[
-            OutlinedButton.icon(
-              onPressed: () => setStatus(IdeaStatus.archived),
-              icon: const Icon(Icons.archive_outlined),
-              label: const Text('Arquivar'),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: () => setStatus(IdeaStatus.active),
-              icon: const Icon(Icons.restore_outlined),
-              label: const Text('Reativar'),
-            ),
-          ],
-          if (idea.status == IdeaStatus.archived)
-            OutlinedButton.icon(
-              onPressed: () => setStatus(IdeaStatus.active),
-              icon: const Icon(Icons.unarchive_outlined),
-              label: const Text('Reativar da arquivo'),
-            ),
+          ),
         ],
       ),
     );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/theme/app_theme.dart';
 import '../../data/models/idea.dart';
 import 'ideas_labels.dart';
 
@@ -89,12 +90,16 @@ class _IdeaEditorScreenState extends ConsumerState<IdeaEditorScreen> {
         title: Text(_isEdit ? 'Editar ideia' : 'Nova ideia'),
         actions: [
           TextButton(
+            style: AppTheme.appBarActionTextButtonStyle,
             onPressed: _saving ? null : _save,
             child: _saving
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.appBarOnBrandForeground,
+                    ),
                   )
                 : const Text('Salvar'),
           ),
@@ -144,7 +149,7 @@ class _IdeaEditorScreenState extends ConsumerState<IdeaEditorScreen> {
                   value: null,
                   child: Text('Nenhuma'),
                 ),
-                ...IdeaCategory.values.map(
+                ...ideaCategoryPickerOrder().map(
                   (c) => DropdownMenuItem<IdeaCategory?>(
                     value: c,
                     child: Text(ideaCategoryLabelPt(c)),

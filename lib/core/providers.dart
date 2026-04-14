@@ -4,6 +4,7 @@ import '../data/models/availability.dart';
 import '../data/models/hangout.dart';
 import '../data/models/idea.dart';
 import '../data/models/timeline_event.dart';
+import '../data/models/timeline_event_comment.dart';
 import '../data/repositories/jbc_repository.dart';
 import 'bootstrap.dart';
 import 'profile/jbc_profile.dart';
@@ -44,6 +45,11 @@ class UserProfile extends Notifier<JbcProfile?> {
 
 final timelineEventsProvider = StreamProvider<List<TimelineEvent>>((ref) {
   return ref.watch(repositoryProvider).watchTimelineEvents();
+});
+
+final timelineEventCommentsProvider =
+    StreamProvider.family<List<TimelineEventComment>, String>((ref, eventId) {
+  return ref.watch(repositoryProvider).watchTimelineEventComments(eventId);
 });
 
 final hangoutsProvider = StreamProvider<List<Hangout>>((ref) {

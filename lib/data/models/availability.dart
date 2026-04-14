@@ -6,6 +6,7 @@ class Availability {
     required this.weekday,
     required this.startTime,
     required this.endTime,
+    this.title,
   });
 
   final String id;
@@ -13,6 +14,7 @@ class Availability {
   final int weekday;
   final String startTime;
   final String endTime;
+  final String? title;
 
   factory Availability.fromRow(Map<String, dynamic> row) {
     return Availability(
@@ -21,6 +23,7 @@ class Availability {
       weekday: (row['weekday'] as num).toInt(),
       startTime: row['start_time'] as String,
       endTime: row['end_time'] as String,
+      title: row['title'] as String?,
     );
   }
 }

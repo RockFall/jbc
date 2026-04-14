@@ -1,9 +1,10 @@
 enum IdeaCategory {
   hangout,
-  food,
-  movie,
-  series,
+  cozinhaaar,
+  filmin,
+  seriesAnime,
   travel,
+  hobby,
   other;
 
   static IdeaCategory? fromDb(String? value) {
@@ -11,16 +12,25 @@ enum IdeaCategory {
     switch (value) {
       case 'hangout':
         return IdeaCategory.hangout;
-      case 'food':
-        return IdeaCategory.food;
-      case 'movie':
-        return IdeaCategory.movie;
-      case 'series':
-        return IdeaCategory.series;
+      case 'cozinhaaar':
+        return IdeaCategory.cozinhaaar;
+      case 'filmin':
+        return IdeaCategory.filmin;
+      case 'series_anime':
+        return IdeaCategory.seriesAnime;
       case 'travel':
         return IdeaCategory.travel;
+      case 'hobby':
+        return IdeaCategory.hobby;
       case 'other':
         return IdeaCategory.other;
+      // legado MVP
+      case 'food':
+        return IdeaCategory.cozinhaaar;
+      case 'movie':
+        return IdeaCategory.filmin;
+      case 'series':
+        return IdeaCategory.seriesAnime;
       default:
         return null;
     }
@@ -30,14 +40,16 @@ enum IdeaCategory {
     switch (this) {
       case IdeaCategory.hangout:
         return 'hangout';
-      case IdeaCategory.food:
-        return 'food';
-      case IdeaCategory.movie:
-        return 'movie';
-      case IdeaCategory.series:
-        return 'series';
+      case IdeaCategory.cozinhaaar:
+        return 'cozinhaaar';
+      case IdeaCategory.filmin:
+        return 'filmin';
+      case IdeaCategory.seriesAnime:
+        return 'series_anime';
       case IdeaCategory.travel:
         return 'travel';
+      case IdeaCategory.hobby:
+        return 'hobby';
       case IdeaCategory.other:
         return 'other';
     }
@@ -82,6 +94,7 @@ class Idea {
     this.category,
     required this.status,
     required this.createdBy,
+    this.archivedBy,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -92,6 +105,8 @@ class Idea {
   final IdeaCategory? category;
   final IdeaStatus status;
   final String createdBy;
+  /// Quem marcou como "Odiei" (quando [status] == archived).
+  final String? archivedBy;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -103,6 +118,7 @@ class Idea {
       category: IdeaCategory.fromDb(row['category'] as String?),
       status: IdeaStatus.fromDb(row['status'] as String? ?? 'active'),
       createdBy: row['created_by'] as String,
+      archivedBy: row['archived_by'] as String?,
       createdAt: DateTime.parse(row['created_at'] as String),
       updatedAt: DateTime.parse(row['updated_at'] as String),
     );

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/hangout_conflict.dart';
 import '../../core/providers.dart';
+import '../../core/theme/app_theme.dart';
 import '../../data/models/availability.dart';
 import 'hangouts_format.dart';
 
@@ -18,6 +19,7 @@ class AvailabilityEditorScreen extends ConsumerStatefulWidget {
 
 class _AvailabilityEditorScreenState
     extends ConsumerState<AvailabilityEditorScreen> {
+  late final TextEditingController _titleController;
   late int _weekday;
   late TimeOfDay _start;
   late TimeOfDay _end;
@@ -29,9 +31,16 @@ class _AvailabilityEditorScreenState
   void initState() {
     super.initState();
     final e = widget.initial;
+    _titleController = TextEditingController(text: e?.title?.trim() ?? '');
     _weekday = e?.weekday ?? DateTime.now().weekday;
     _start = e != null ? parseTimeHhMm(e.startTime) : const TimeOfDay(hour: 9, minute: 0);
     _end = e != null ? parseTimeHhMm(e.endTime) : const TimeOfDay(hour: 12, minute: 0);
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    super.dispose();
   }
 
   Future<void> _pickTime({required bool isStart}) async {
@@ -67,6 +76,8 @@ class _AvailabilityEditorScreenState
     setState(() => _saving = true);
     try {
       final repo = ref.read(repositoryProvider);
+      final titleText = _titleController.text.trim();
+      final title = titleText.isEmpty ? null : titleText;
       if (_isEdit) {
         await repo.updateAvailability(
           existing: widget.initial!,
@@ -74,6 +85,7 @@ class _AvailabilityEditorScreenState
           weekday: _weekday,
           startTime: startStr,
           endTime: endStr,
+          title: title,
         );
       } else {
         await repo.createAvailability(
@@ -81,6 +93,7 @@ class _AvailabilityEditorScreenState
           weekday: _weekday,
           startTime: startStr,
           endTime: endStr,
+          title: title,
         );
       }
       ref.invalidate(availabilitiesProvider);
@@ -149,12 +162,16 @@ class _AvailabilityEditorScreenState
               onPressed: _saving ? null : _delete,
             ),
           TextButton(
+            style: AppTheme.appBarActionTextButtonStyle,
             onPressed: _saving ? null : _save,
             child: _saving
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.appBarOnBrandForeground,
+                    ),
                   )
                 : const Text('Salvar'),
           ),
@@ -173,6 +190,16 @@ class _AvailabilityEditorScreenState
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 20),
+          TextFormField(
+            controller: _titleController,
+            decoration: const InputDecoration(
+              labelText: 'Título (opcional)',
+              hintText: 'Ex.: Aula, plantão…',
+              border: OutlineInputBorder(),
+            ),
+            textCapitalization: TextCapitalization.sentences,
+          ),
+          const SizedBox(height: 16),
           DropdownButtonFormField<int>(
             // ignore: deprecated_member_use — precisamos de seleção controlada por estado.
             value: _weekday,

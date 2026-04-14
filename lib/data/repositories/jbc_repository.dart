@@ -3,9 +3,24 @@ import '../models/availability.dart';
 import '../models/hangout.dart';
 import '../models/idea.dart';
 import '../models/timeline_event.dart';
+import '../models/timeline_event_comment.dart';
 
 abstract class JbcRepository {
   Stream<List<TimelineEvent>> watchTimelineEvents();
+
+  Stream<List<TimelineEventComment>> watchTimelineEventComments(String timelineEventId);
+
+  Future<void> addTimelineEventComment({
+    required String timelineEventId,
+    required JbcProfile author,
+    required String body,
+  });
+
+  /// Remove comentário; só o autor [deletedBy] pode apagar.
+  Future<void> deleteTimelineEventComment({
+    required TimelineEventComment comment,
+    required JbcProfile deletedBy,
+  });
 
   /// Cria memória manual (`origin = manual`, sem `hangout_id`).
   Future<void> createManualTimelineEvent({
@@ -13,19 +28,18 @@ abstract class JbcRepository {
     required DateTime occurredAt,
     required String title,
     required String description,
-    List<int>? imageBytes,
-    String? imageExtension,
+    List<TimelineImageInput> images = const [],
+    int primaryImageIndex = 0,
   });
 
-  /// Atualiza texto/data/imagem; preserva `origin`, `hangout_id` e `created_by`.
+  /// Atualiza texto/data/fotos; preserva `origin`, `hangout_id` e `created_by`.
   Future<void> updateTimelineEvent({
     required TimelineEvent existing,
     required DateTime occurredAt,
     required String title,
     required String description,
-    List<int>? newImageBytes,
-    String? newImageExtension,
-    bool removeImage = false,
+    required List<TimelineImageInput> images,
+    required int primaryImageIndex,
   });
 
   Future<void> deleteTimelineEvent(TimelineEvent event);
@@ -39,6 +53,7 @@ abstract class JbcRepository {
     required int weekday,
     required String startTime,
     required String endTime,
+    String? title,
   });
 
   Future<void> updateAvailability({
@@ -47,6 +62,7 @@ abstract class JbcRepository {
     required int weekday,
     required String startTime,
     required String endTime,
+    String? title,
   });
 
   Future<void> deleteAvailability({
@@ -86,8 +102,8 @@ abstract class JbcRepository {
     required DateTime occurredAt,
     required String title,
     required String description,
-    List<int>? imageBytes,
-    String? imageExtension,
+    List<TimelineImageInput> images = const [],
+    int primaryImageIndex = 0,
   });
 
   Stream<List<Idea>> watchIdeas();
@@ -109,6 +125,17 @@ abstract class JbcRepository {
   Future<void> updateIdeaStatus({
     required Idea existing,
     required IdeaStatus status,
+    /// Preenchido ao marcar como [IdeaStatus.archived] (quem odiou).
+    JbcProfile? archivedBy,
+  });
+
+  /// Apaga todos os dados das tabelas JBC (perigoso). Só para dev.
+  Future<void> clearAllRemoteData();
+
+  /// Insere memórias manuais a partir de JSON `[{date, title, description}]`.
+  Future<void> importTimelineEventsFromJson({
+    required JbcProfile profile,
+    required String json,
   });
 
   Future<void> deleteIdea(Idea idea);
@@ -121,3 +148,4 @@ abstract class JbcRepository {
 
   Future<void> insertSampleIdea(JbcProfile profile);
 }
+
