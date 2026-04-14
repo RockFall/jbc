@@ -1,0 +1,59 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ / Android Studio
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# VS Code (descomente se não quiser versionar config local)
+# .vscode/
+
+# Flutter / Dart
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication / obfuscation
+app.*.symbols
+app.*.map.json
+
+# Android build outputs
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Chaves e segredos locais (nunca commitar)
+dart_defines.json
+*.env
+.env
+.env.*
+!.env.example
+
+# Assinatura Android (se usar keystore próprio)
+**/android/key.properties
+*.jks
+*.keystore
+
+# Firebase / Google (se adicionar depois)
+**/google-services.json
+**/GoogleService-Info.plist
