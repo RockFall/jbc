@@ -43,10 +43,13 @@ dependencies:
   path: ^1.9.1
   mime: ^2.0.0
   flutter_staggered_grid_view: ^0.7.0
+  cached_network_image: ^3.4.1
+  google_fonts: ^6.3.3
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.14.4
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -95,3 +98,18 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# Ícone do launcher (Android / iOS / web / Windows / macOS).
+# Regenerar após mudar a imagem: dart run flutter_launcher_icons
+flutter_launcher_icons:
+  image_path: assets/jbc_logo_white_on_red.png
+  android: true
+  ios: true
+  macos:
+    generate: true
+  windows:
+    generate: true
+  web:
+    generate: true
+  adaptive_icon_background: "#C00018"
+  adaptive_icon_foreground: assets/jbc_logo_white_on_red.png

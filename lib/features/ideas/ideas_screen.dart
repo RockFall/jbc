@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/profile/jbc_profile.dart';
 import '../../core/providers.dart';
 import '../../data/models/idea.dart';
 import 'idea_category_style.dart';
 import 'idea_detail_screen.dart';
+import 'idea_paper_card.dart';
 import 'ideas_labels.dart';
 
 enum IdeaListFilter {
@@ -196,14 +198,18 @@ class _IdeasScreenState extends ConsumerState<IdeasScreen> {
                 onRefresh: onRefresh,
                 child: MasonryGridView.count(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 88),
+                  padding: const EdgeInsets.fromLTRB(10, 0, 10, 88),
                   crossAxisCount: 2,
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 14,
+                  crossAxisSpacing: 12,
                   itemCount: list.length,
                   itemBuilder: (context, index) {
                     final idea = list[index];
-                    return _IdeaGridTile(idea: idea, filter: _filter);
+                    return _IdeaGridTile(
+                      idea: idea,
+                      filter: _filter,
+                      layoutIndex: index,
+                    );
                   },
                 ),
               );
@@ -288,79 +294,87 @@ class _IdeaGridTile extends StatelessWidget {
   const _IdeaGridTile({
     required this.idea,
     required this.filter,
+    required this.layoutIndex,
   });
 
   final Idea idea;
   final IdeaListFilter filter;
+  final int layoutIndex;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
     final cat = idea.category;
-    final base = ideaCategoryColor(cat, scheme);
-    final onCard = ThemeData.estimateBrightnessForColor(base) == Brightness.dark
-        ? Colors.white
-        : scheme.onSurface;
-    final subtitle = Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: onCard.withValues(alpha: 0.85),
-        );
+    final accent = ideaCategoryColor(cat, scheme);
 
     final extraLines = (idea.title.length / 28).floor().clamp(0, 6);
     final minHeight = 96.0 + extraLines * 18.0;
 
-    return Material(
-      color: base,
-      borderRadius: BorderRadius.circular(18),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          Navigator.of(context).push<void>(
-            MaterialPageRoute<void>(
-              builder: (_) => IdeaDetailScreen(idea: idea),
-            ),
+    void openDetail() {
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => IdeaDetailScreen(idea: idea),
+        ),
+      );
+    }
+
+    return IdeaPaperCard(
+      ideaId: idea.id,
+      layoutIndex: layoutIndex,
+      category: cat,
+      scheme: scheme,
+      minHeight: minHeight,
+      onTap: openDetail,
+      child: Builder(
+        builder: (context) {
+          final ink =
+              DefaultTextStyle.of(context).style.color ?? scheme.onSurface;
+          final subtitle = theme.textTheme.labelSmall?.copyWith(
+            color: ink.withValues(alpha: 0.82),
+            height: 1.25,
           );
-        },
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: minHeight),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 10, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(ideaCategoryIcon(cat), size: 20, color: onCard.withValues(alpha: 0.9)),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        idea.title,
-                        maxLines: 5,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          color: onCard,
-                          fontWeight: FontWeight.w800,
-                          height: 1.2,
-                        ),
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    ideaCategoryIcon(cat),
+                    size: 22,
+                    color: Color.lerp(ink, accent, 0.35)!
+                        .withValues(alpha: 0.92),
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      idea.title,
+                      maxLines: 5,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.caveat(
+                        fontSize: 22,
+                        height: 1.12,
+                        fontWeight: FontWeight.w700,
+                        color: ink,
                       ),
                     ),
-                  ],
-                ),
-                if (filter == IdeaListFilter.archived &&
-                    idea.archivedBy != null &&
-                    idea.archivedBy!.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Odiado por: ${JbcProfile.displayNameForStorageKey(idea.archivedBy!)}',
-                    style: subtitle,
                   ),
                 ],
+              ),
+              if (filter == IdeaListFilter.archived &&
+                  idea.archivedBy != null &&
+                  idea.archivedBy!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Odiado por: ${JbcProfile.displayNameForStorageKey(idea.archivedBy!)}',
+                  style: subtitle,
+                ),
               ],
-            ),
-          ),
-        ),
+            ],
+          );
+        },
       ),
     );
   }

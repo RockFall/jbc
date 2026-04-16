@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -296,25 +297,24 @@ class _TimelineEventDetailScreenState extends ConsumerState<TimelineEventDetailS
                         itemCount: urls.length,
                         onPageChanged: (i) => setState(() => _carouselPage = i),
                         itemBuilder: (context, i) {
-                          return Image.network(
-                            urls[i],
+                          return CachedNetworkImage(
+                            imageUrl: urls[i],
                             fit: BoxFit.cover,
                             width: double.infinity,
                             height: carouselH,
-                            loadingBuilder: (context, child, progress) {
-                              if (progress == null) return child;
-                              return ColoredBox(
-                                color: scheme.surfaceContainerHighest,
-                                child: const Center(
-                                  child: SizedBox(
-                                    width: 36,
-                                    height: 36,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  ),
+                            fadeInDuration: Duration.zero,
+                            fadeOutDuration: Duration.zero,
+                            placeholder: (context, _) => ColoredBox(
+                              color: scheme.surfaceContainerHighest,
+                              child: const Center(
+                                child: SizedBox(
+                                  width: 36,
+                                  height: 36,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
                                 ),
-                              );
-                            },
-                            errorBuilder: (context, error, st) => ColoredBox(
+                              ),
+                            ),
+                            errorWidget: (context, url, error) => ColoredBox(
                               color: scheme.surfaceContainerHighest,
                               child: Icon(
                                 Icons.broken_image_outlined,
