@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../media/timeline_photo_pick_helpers.dart';
 import '../../data/models/hangout.dart';
 import '../../data/models/timeline_event.dart';
 import 'hangouts_format.dart';
@@ -67,27 +68,37 @@ class _HangoutMemoryScreenState extends ConsumerState<HangoutMemoryScreen> {
     return DateTime(d.year, d.month, d.day, 12).toUtc();
   }
 
-  Future<void> _pickImage(ImageSource source) async {
-    final picker = ImagePicker();
-    final file = await picker.pickImage(
-      source: source,
-      maxWidth: 2048,
-      imageQuality: 85,
+  Future<void> _addPhotosFromGallery() async {
+    await pickCropAndAppendTimelinePhotos(
+      context: context,
+      currentSlotCount: _slots.length,
+      onAppend: (bytes, ref) {
+        setState(() {
+          _slots.add(_ImageSlot.local(bytes, ref));
+          if (_slots.length == 1) _primaryIndex = 0;
+        });
+      },
     );
-    if (file != null) {
-      final bytes = await file.readAsBytes();
-      setState(() {
-        _slots.add(_ImageSlot.local(bytes, file));
-        if (_slots.length == 1) _primaryIndex = 0;
-      });
-    }
+  }
+
+  Future<void> _addPhotoFromCamera() async {
+    await pickCropCameraTimelinePhoto(
+      context: context,
+      currentSlotCount: _slots.length,
+      onAppend: (bytes, ref) {
+        setState(() {
+          _slots.add(_ImageSlot.local(bytes, ref));
+          if (_slots.length == 1) _primaryIndex = 0;
+        });
+      },
+    );
   }
 
   Future<void> _showImageSourceSheet() async {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (context) {
+      builder: (sheetContext) {
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -95,17 +106,18 @@ class _HangoutMemoryScreenState extends ConsumerState<HangoutMemoryScreen> {
               ListTile(
                 leading: const Icon(Icons.photo_library_outlined),
                 title: const Text('Galeria'),
+                subtitle: const Text('Várias fotos de uma vez'),
                 onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.gallery);
+                  Navigator.pop(sheetContext);
+                  Future.microtask(() => _addPhotosFromGallery());
                 },
               ),
               ListTile(
                 leading: const Icon(Icons.photo_camera_outlined),
                 title: const Text('Câmera'),
                 onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.camera);
+                  Navigator.pop(sheetContext);
+                  Future.microtask(() => _addPhotoFromCamera());
                 },
               ),
             ],
@@ -128,6 +140,7 @@ class _HangoutMemoryScreenState extends ConsumerState<HangoutMemoryScreen> {
 
   String _extFor(XFile file) {
     var ext = p.extension(file.path).replaceFirst('.', '');
+    if (ext.isEmpty) ext = p.extension(file.name).replaceFirst('.', '');
     if (ext.isEmpty) ext = 'jpg';
     return ext;
   }
@@ -353,6 +366,11 @@ class _HangoutMemoryScreenState extends ConsumerState<HangoutMemoryScreen> {
             Text(
               'Fotos (opcional)',
               style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Galeria: várias de uma vez; depois enquadre cada foto (4:3).',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
             SizedBox(

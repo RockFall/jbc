@@ -9,6 +9,7 @@ import '../../core/profile/jbc_profile.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/models/timeline_event.dart';
+import '../media/timeline_photo_pick_helpers.dart';
 
 class _ImageSlot {
   _ImageSlot.network(this.url) : bytes = null, file = null;
@@ -72,27 +73,37 @@ class _TimelineEventEditorScreenState
     return DateTime(d.year, d.month, d.day, 12).toUtc();
   }
 
-  Future<void> _pickImage(ImageSource source) async {
-    final picker = ImagePicker();
-    final file = await picker.pickImage(
-      source: source,
-      maxWidth: 2048,
-      imageQuality: 85,
+  Future<void> _addPhotosFromGallery() async {
+    await pickCropAndAppendTimelinePhotos(
+      context: context,
+      currentSlotCount: _slots.length,
+      onAppend: (bytes, ref) {
+        setState(() {
+          _slots.add(_ImageSlot.local(bytes, ref));
+          if (_slots.length == 1) _primaryIndex = 0;
+        });
+      },
     );
-    if (file != null) {
-      final bytes = await file.readAsBytes();
-      setState(() {
-        _slots.add(_ImageSlot.local(bytes, file));
-        if (_slots.length == 1) _primaryIndex = 0;
-      });
-    }
+  }
+
+  Future<void> _addPhotoFromCamera() async {
+    await pickCropCameraTimelinePhoto(
+      context: context,
+      currentSlotCount: _slots.length,
+      onAppend: (bytes, ref) {
+        setState(() {
+          _slots.add(_ImageSlot.local(bytes, ref));
+          if (_slots.length == 1) _primaryIndex = 0;
+        });
+      },
+    );
   }
 
   Future<void> _showImageSourceSheet() async {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (context) {
+      builder: (sheetContext) {
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -100,17 +111,18 @@ class _TimelineEventEditorScreenState
               ListTile(
                 leading: const Icon(Icons.photo_library_outlined),
                 title: const Text('Galeria'),
+                subtitle: const Text('Várias fotos de uma vez'),
                 onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.gallery);
+                  Navigator.pop(sheetContext);
+                  Future.microtask(() => _addPhotosFromGallery());
                 },
               ),
               ListTile(
                 leading: const Icon(Icons.photo_camera_outlined),
                 title: const Text('Câmera'),
                 onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.camera);
+                  Navigator.pop(sheetContext);
+                  Future.microtask(() => _addPhotoFromCamera());
                 },
               ),
             ],
@@ -137,10 +149,12 @@ class _TimelineEventEditorScreenState
       if (s.url != null) {
         out.add(TimelineImageInput.existing(s.url!));
       } else if (s.bytes != null) {
-        var ext = s.file != null
-            ? p.extension(s.file!.path).replaceFirst('.', '')
-            : 'jpg';
-        if (ext.isEmpty) ext = 'jpg';
+        var ext = 'jpg';
+        if (s.file != null) {
+          ext = p.extension(s.file!.path).replaceFirst('.', '');
+          if (ext.isEmpty) ext = p.extension(s.file!.name).replaceFirst('.', '');
+          if (ext.isEmpty) ext = 'jpg';
+        }
         out.add(TimelineImageInput.upload(s.bytes!, ext));
       }
     }
@@ -168,6 +182,7 @@ class _TimelineEventEditorScreenState
 
       if (_isEdit) {
         await repo.updateTimelineEvent(
+          updatedBy: profile,
           existing: widget.initial!,
           occurredAt: occurred,
           title: title,
@@ -428,7 +443,8 @@ class _TimelineEventEditorScreenState
             ),
             const SizedBox(height: 4),
             Text(
-              'Toque na estrela para definir a foto principal na linha do tempo.',
+              'Galeria: escolha várias fotos, revise a lista e enquadre cada uma (4:3). '
+              'Toque na estrela para definir a capa.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 12),

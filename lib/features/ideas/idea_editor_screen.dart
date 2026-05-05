@@ -54,6 +54,7 @@ class _IdeaEditorScreenState extends ConsumerState<IdeaEditorScreen> {
 
       if (_isEdit) {
         await repo.updateIdea(
+          updatedBy: profile,
           existing: widget.initial!,
           title: title,
           description: description,

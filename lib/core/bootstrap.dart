@@ -4,16 +4,19 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../data/repositories/jbc_repository.dart';
 import '../data/repositories/noop_repository.dart';
 import '../data/repositories/supabase_repository.dart';
+import 'moment_emotion/moment_emotion_prefs_cache.dart';
 import 'profile/profile_store.dart';
 
 class AppBootstrap {
   AppBootstrap({
     required this.profileStore,
     required this.repository,
+    required this.momentEmotionCache,
   });
 
   final ProfileStore profileStore;
   final JbcRepository repository;
+  final MomentEmotionPrefsCache momentEmotionCache;
 
   bool get hasRemote => repository is! NoopRepository;
 
@@ -21,11 +24,13 @@ class AppBootstrap {
     const url = String.fromEnvironment('SUPABASE_URL', defaultValue: '');
     const key = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
     final store = ProfileStore(prefs);
+    final momentEmotionCache = MomentEmotionPrefsCache(prefs);
 
     if (url.isEmpty || key.isEmpty) {
       return AppBootstrap(
         profileStore: store,
         repository: const NoopRepository(),
+        momentEmotionCache: momentEmotionCache,
       );
     }
 
@@ -41,6 +46,7 @@ class AppBootstrap {
     return AppBootstrap(
       profileStore: store,
       repository: SupabaseRepository(client),
+      momentEmotionCache: momentEmotionCache,
     );
   }
 }

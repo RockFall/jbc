@@ -28,6 +28,7 @@ class IdeaDetailScreen extends ConsumerWidget {
               existing: idea,
               status: s,
               archivedBy: s == IdeaStatus.archived ? me : null,
+              notificationActor: me,
             );
         ref.invalidate(ideasProvider);
         if (context.mounted) {

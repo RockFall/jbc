@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'continhas_tokens.dart';
+
 /// Tema acolhedor; barra superior da marca em vermelho JBC.
 class AppTheme {
   static const Color brandRed = Color(0xFFC30028);
@@ -22,6 +24,7 @@ class AppTheme {
     return ThemeData(
       colorScheme: base,
       useMaterial3: true,
+      extensions: const [ContinhasTokens.light],
       appBarTheme: AppBarTheme(
         centerTitle: false,
         backgroundColor: brandRed,

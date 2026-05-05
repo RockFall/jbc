@@ -8,6 +8,7 @@ import '../../data/models/hangout.dart';
 import 'availability_editor_screen.dart';
 import 'hangout_editor_screen.dart';
 import 'hangouts_format.dart';
+import 'week_grid_view.dart';
 
 bool _hangoutIsUpcoming(Hangout h) {
   if (h.status != HangoutStatus.planned) return false;
@@ -621,101 +622,253 @@ class _MyAvailabilitiesTab extends ConsumerWidget {
   }
 }
 
-class _ConsolidatedAvailTab extends ConsumerWidget {
+class _ConsolidatedAvailTab extends ConsumerStatefulWidget {
   const _ConsolidatedAvailTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(availabilitiesProvider);
+  ConsumerState<_ConsolidatedAvailTab> createState() => _ConsolidatedAvailTabState();
+}
 
-    Future<void> onRefresh() async {
-      ref.invalidate(availabilitiesProvider);
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+class _ConsolidatedAvailTabState extends ConsumerState<_ConsolidatedAvailTab> {
+  bool _weekView = true;
+  final Set<String> _visiblePeople = {'caio', 'jojo', 'bibi'};
+
+  void _togglePerson(JbcProfile p) {
+    setState(() {
+      final k = p.storageKey;
+      if (_visiblePeople.contains(k)) {
+        if (_visiblePeople.length > 1) {
+          _visiblePeople.remove(k);
+        }
+      } else {
+        _visiblePeople.add(k);
+      }
+    });
+  }
+
+  Future<void> _onRefresh() async {
+    ref.invalidate(availabilitiesProvider);
+    ref.invalidate(hangoutsProvider);
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+  }
+
+  Widget _buildListView(BuildContext context, List<Availability> all) {
+    if (all.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.3,
+            child: const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'Ninguém cadastrou indisponibilidades ainda.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
     }
+    final byDay = <int, List<Availability>>{};
+    for (final a in all) {
+      byDay.putIfAbsent(a.weekday, () => []).add(a);
+    }
+    final days = byDay.keys.toList()..sort();
 
-    return async.when(
-      skipLoadingOnReload: true,
-      data: (all) {
-        if (all.isEmpty) {
-          return RefreshIndicator(
-            onRefresh: onRefresh,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: [
-                SizedBox(
-                  height: MediaQuery.sizeOf(context).height * 0.3,
-                  child: const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text(
-                        'Ninguém cadastrou indisponibilidades ainda.',
-                        textAlign: TextAlign.center,
-                      ),
+    return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      itemCount: days.length,
+      itemBuilder: (context, i) {
+        final w = days[i];
+        final items = byDay[w]!
+          ..sort((a, b) {
+            final p = a.person.compareTo(b.person);
+            if (p != 0) return p;
+            return a.startTime.compareTo(b.startTime);
+          });
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                weekdayLabelPt(w),
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
                     ),
+              ),
+            ),
+            ...items.map(
+              (a) => Card(
+                margin: const EdgeInsets.only(bottom: 6),
+                child: ListTile(
+                  dense: true,
+                  title: Text(
+                    '${JbcProfile.displayNameForStorageKey(a.person)} · '
+                    '${a.startTime} – ${a.endTime}',
+                  ),
+                  subtitle: (a.title != null && a.title!.trim().isNotEmpty)
+                      ? Text(a.title!.trim())
+                      : null,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final async = ref.watch(availabilitiesProvider);
+    final hangAsync = ref.watch(hangoutsProvider);
+
+    return hangAsync.when(
+      skipLoadingOnReload: true,
+      data: (hangouts) {
+        return async.when(
+          skipLoadingOnReload: true,
+          data: (all) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      SegmentedButton<bool>(
+                        segments: const [
+                          ButtonSegment<bool>(
+                            value: true,
+                            label: Text('Semana'),
+                            icon: Icon(Icons.calendar_view_week_outlined),
+                          ),
+                          ButtonSegment<bool>(
+                            value: false,
+                            label: Text('Lista'),
+                            icon: Icon(Icons.list_alt_outlined),
+                          ),
+                        ],
+                        selected: {_weekView},
+                        onSelectionChanged: (s) => setState(() => _weekView = s.first),
+                      ),
+                      if (_weekView) ...[
+                        for (final p in JbcProfile.values)
+                          _ProfileLegendFilterChip(
+                            profile: p,
+                            selected: _visiblePeople.contains(p.storageKey),
+                            onSelected: () => _togglePerson(p),
+                          ),
+                      ],
+                    ],
                   ),
                 ),
-              ],
-            ),
-          );
-        }
-        final byDay = <int, List<Availability>>{};
-        for (final a in all) {
-          byDay.putIfAbsent(a.weekday, () => []).add(a);
-        }
-        final days = byDay.keys.toList()..sort();
-
-        return RefreshIndicator(
-          onRefresh: onRefresh,
-          child: ListView.builder(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-            itemCount: days.length,
-            itemBuilder: (context, i) {
-              final w = days[i];
-              final items = byDay[w]!
-                ..sort((a, b) {
-                  final p = a.person.compareTo(b.person);
-                  if (p != 0) return p;
-                  return a.startTime.compareTo(b.startTime);
-                });
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      weekdayLabelPt(w),
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                  ),
-                  ...items.map(
-                    (a) => Card(
-                      margin: const EdgeInsets.only(bottom: 6),
-                      child: ListTile(
-                        dense: true,
-                        title: Text(
-                          '${JbcProfile.displayNameForStorageKey(a.person)} · '
-                          '${a.startTime} – ${a.endTime}',
+                Expanded(
+                  child: _weekView
+                      ? LayoutBuilder(
+                          builder: (context, cons) {
+                            return RefreshIndicator(
+                              onRefresh: _onRefresh,
+                              child: SingleChildScrollView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                child: SizedBox(
+                                  height: cons.maxHeight + 1,
+                                  child: WeekSchedulePager(
+                                    viewportHeight: cons.maxHeight,
+                                    hangouts: hangouts,
+                                    availabilities: all,
+                                    visiblePeople: Set<String>.from(_visiblePeople),
+                                    onHangoutTap: (h) async {
+                                      await Navigator.of(context).push<void>(
+                                        MaterialPageRoute<void>(
+                                          builder: (_) => HangoutEditorScreen(initial: h),
+                                        ),
+                                      );
+                                      if (context.mounted) {
+                                        ref.invalidate(hangoutsProvider);
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _onRefresh,
+                          child: _buildListView(context, all),
                         ),
-                        subtitle: (a.title != null && a.title!.trim().isNotEmpty)
-                            ? Text(a.title!.trim())
-                            : null,
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
+                ),
+              ],
+            );
+          },
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => _RetryMessage(
+            message: '$e',
+            onRetry: () => ref.invalidate(availabilitiesProvider),
           ),
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => _RetryMessage(
         message: '$e',
-        onRetry: () => ref.invalidate(availabilitiesProvider),
+        onRetry: () => ref.invalidate(hangoutsProvider),
       ),
+    );
+  }
+}
+
+/// Legenda + filtro: mesma cor dos blocos de indisponibilidade na grade (`week_grid_view`).
+class _ProfileLegendFilterChip extends StatelessWidget {
+  const _ProfileLegendFilterChip({
+    required this.profile,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final JbcProfile profile;
+  final bool selected;
+  final VoidCallback onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final c = weekGridColorForPerson(profile.storageKey);
+    return FilterChip(
+      showCheckmark: false,
+      avatar: CircleAvatar(
+        radius: 7,
+        backgroundColor: c,
+      ),
+      label: Text(
+        profile.displayName,
+        style: TextStyle(
+          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          color: scheme.onSurface,
+        ),
+      ),
+      selected: selected,
+      onSelected: (_) => onSelected(),
+      color: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) {
+          return c.withValues(alpha: 0.32);
+        }
+        return scheme.surfaceContainerHighest.withValues(alpha: 0.9);
+      }),
+      side: WidgetStateBorderSide.resolveWith((states) {
+        return BorderSide(
+          color: c,
+          width: states.contains(WidgetState.selected) ? 2 : 1.2,
+        );
+      }),
     );
   }
 }

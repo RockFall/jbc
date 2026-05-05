@@ -10,8 +10,8 @@ App privado para três pessoas: **memória** (Timeline), **rolês** e **cantinho
 ## Supabase (sincronização)
 
 1. Crie um projeto em [Supabase](https://supabase.com) e copie **Project URL** e **anon public** key.
-2. No SQL Editor, execute o script [`docs/supabase_schema.sql`](docs/supabase_schema.sql) (tabelas, RLS e bucket **`timeline-images`** para fotos da timeline).
-3. Em **Database → Replication**, habilite o **Realtime** para as tabelas `timeline_events`, `hangouts`, `availabilities` e `ideas` (necessário para os streams em tempo real).
+2. No SQL Editor, execute o script [`docs/supabase_schema.sql`](docs/supabase_schema.sql) (tabelas, RLS e bucket **`timeline-images`** para fotos da timeline). Se o projeto já existia antes das notificações (Epic 9), execute também [`docs/supabase_notification_epic9.sql`](docs/supabase_notification_epic9.sql). Se já existia antes das reações no detalhe (Epic 11), execute [`docs/supabase_timeline_reactions_epic11.sql`](docs/supabase_timeline_reactions_epic11.sql).
+3. Em **Database → Replication**, habilite o **Realtime** para as tabelas `timeline_events`, `hangouts`, `availabilities`, `ideas`, **`jbc_notifications`**, **`fcm_device_tokens`** e **`timeline_event_reactions`** (Epic 11: reações no detalhe da memória).
 4. Opcional: em **Authentication → Providers**, habilite **Anonymous** se quiser usar login anônimo; o app funciona com a chave `anon` mesmo com políticas RLS abertas do script de desenvolvimento.
 
 ### Rodar com variáveis de ambiente
@@ -31,6 +31,10 @@ flutter run --dart-define-from-file=dart_defines.json
 ```
 
 Sem `SUPABASE_URL` e `SUPABASE_ANON_KEY`, o app abre em modo **somente local** (sem sincronização entre aparelhos); ainda é possível escolher perfil e navegar nas três abas. Na timeline, **+** abre o formulário de memória, mas salvar exige Supabase configurado.
+
+**Fotos na timeline / memória do rolê:** galeria com multi-seleção (até 20 por vez), revisão da lista e enquadramento 4:3 com `crop_your_image` antes do upload; ver `lib/core/media/timeline_photo_limits.dart`.
+
+**Notificações e push (opcional):** com Supabase ativo, o sininho lista avisos guardados em `jbc_notifications`. Para **Firebase Cloud Messaging** no Android, defina `dart_defines` com `FIREBASE_PROJECT_ID`, `FIREBASE_MESSAGING_SENDER_ID`, `FIREBASE_ANDROID_API_KEY`, `FIREBASE_ANDROID_APP_ID` (e opcionalmente `FIREBASE_STORAGE_BUCKET`). Para o app pedir envio via Edge Function após nova memória ou novo rolê, use `--dart-define=JBC_PUSH_INVOCATION=true` e faça o deploy de `supabase/functions/send-jbc-push` com o secret `FIREBASE_SERVICE_ACCOUNT_JSON`. Veja `dart_defines.example.json`.
 
 A **timeline** lista memórias do **mais antigo ao mais recente** (data do acontecimento).
 

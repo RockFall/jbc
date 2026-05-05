@@ -6,10 +6,12 @@ import '../../core/hangout_conflict.dart';
 import '../../core/profile/jbc_profile.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/providers.dart';
+import '../../data/repositories/noop_repository.dart';
 import '../../data/models/hangout.dart';
 import '../../data/models/idea.dart';
 import 'hangout_memory_screen.dart';
 import 'hangouts_format.dart';
+import '../continhas/continhas_hangout_screen.dart';
 
 class HangoutEditorScreen extends ConsumerStatefulWidget {
   const HangoutEditorScreen({
@@ -131,6 +133,7 @@ class _HangoutEditorScreenState extends ConsumerState<HangoutEditorScreen> {
 
       if (_isEdit) {
         await repo.updateHangout(
+          updatedBy: profile,
           existing: _h!,
           title: title,
           description: desc,
@@ -174,6 +177,7 @@ class _HangoutEditorScreenState extends ConsumerState<HangoutEditorScreen> {
             await repo.updateIdeaStatus(
               existing: fromIdea,
               status: IdeaStatus.done,
+              notificationActor: profile,
             );
             ref.invalidate(ideasProvider);
           }
@@ -219,9 +223,18 @@ class _HangoutEditorScreenState extends ConsumerState<HangoutEditorScreen> {
     );
     if (ok != true || !mounted) return;
 
+    final profile = ref.read(userProfileProvider);
+    if (profile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Escolha um perfil nas configurações.')),
+      );
+      return;
+    }
+
     setState(() => _saving = true);
     try {
       await ref.read(repositoryProvider).updateHangoutStatus(
+            updatedBy: profile,
             existing: _h!,
             status: status,
           );
@@ -292,10 +305,25 @@ class _HangoutEditorScreenState extends ConsumerState<HangoutEditorScreen> {
     final startStr = formatTimeOfDay(_start);
     final endStr = _end != null ? formatTimeOfDay(_end!) : null;
 
+    final hasRemote = ref.watch(hasRemoteProvider);
+    final repo = ref.watch(repositoryProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEdit ? 'Rolê' : 'Novo rolê'),
         actions: [
+          if (_isEdit && !cancelled && hasRemote && repo is! NoopRepository && _h != null)
+            IconButton(
+              tooltip: 'Continhas deste rolê',
+              icon: const Icon(Icons.account_balance_wallet_outlined),
+              onPressed: () {
+                Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (_) => ContinhasHangoutScreen(hangout: _h!),
+                  ),
+                );
+              },
+            ),
           if (!cancelled)
             TextButton(
               style: AppTheme.appBarActionTextButtonStyle,

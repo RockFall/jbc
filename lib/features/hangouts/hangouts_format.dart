@@ -42,7 +42,8 @@ TimeOfDay parseTimeHhMm(String hhmm) {
 DateTime hangoutDateOnly(DateTime d) =>
     DateTime(d.year, d.month, d.day);
 
-DateTime _mondayOfWeekContaining(DateTime dayLocal) {
+/// Segunda-feira 00:00 (local) da semana ISO que contém [dayLocal].
+DateTime mondayOfWeekContaining(DateTime dayLocal) {
   final x = hangoutDateOnly(dayLocal);
   return x.subtract(Duration(days: x.weekday - 1));
 }
@@ -73,8 +74,8 @@ String formatHangoutDateRelativePt(DateTime date) {
   if (diffDays == 1) return 'Amanhã';
   if (diffDays == -1) return 'Ontem';
 
-  final monThis = _mondayOfWeekContaining(today);
-  final monThat = _mondayOfWeekContaining(d);
+  final monThis = mondayOfWeekContaining(today);
+  final monThat = mondayOfWeekContaining(d);
   final weekDiff = monThat.difference(monThis).inDays ~/ 7;
 
   final wd = weekdayShortPt(d.weekday);

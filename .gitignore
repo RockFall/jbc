@@ -57,3 +57,9 @@ dart_defines.json
 # Firebase / Google (se adicionar depois)
 **/google-services.json
 **/GoogleService-Info.plist
+
+# Node (Supabase edge / tooling local)
+node_modules/
+
+# Supabase CLI cache local
+supabase/.temp/

@@ -6,9 +6,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app.dart';
 import 'core/bootstrap.dart';
 import 'core/providers.dart';
+import 'core/push/jbc_firebase_bootstrap.dart';
+import 'core/push/jbc_foreground_local_push.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await JbcFirebaseBootstrap.tryInitialize();
+  await JbcForegroundLocalPush.ensureReady();
   await initializeDateFormatting('pt_BR');
   final prefs = await SharedPreferences.getInstance();
   final bootstrap = await AppBootstrap.load(prefs);

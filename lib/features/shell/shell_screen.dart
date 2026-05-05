@@ -9,9 +9,11 @@ import '../hangouts/hangout_editor_screen.dart';
 import '../hangouts/hangouts_screen.dart';
 import '../ideas/idea_editor_screen.dart';
 import '../ideas/ideas_screen.dart';
-import '../settings/settings_screen.dart';
+import 'jbc_hub_screen.dart';
+import '../notifications/notifications_screen.dart';
 import '../timeline/timeline_event_editor_screen.dart';
 import '../timeline/timeline_screen.dart';
+import '../../core/push/jbc_firebase_bootstrap.dart';
 
 class ShellScreen extends ConsumerStatefulWidget {
   const ShellScreen({super.key});
@@ -21,13 +23,14 @@ class ShellScreen extends ConsumerStatefulWidget {
 }
 
 class _ShellScreenState extends ConsumerState<ShellScreen> {
-  int _index = 1;
+  /// 0 = Central (hub), 1 = Ideias, 2 = Linha do tempo, 3 = Rolês.
+  int _index = 2;
 
   Future<void> _onFab() async {
     final profile = ref.read(userProfileProvider);
     if (profile == null) return;
 
-    if (_index == 0) {
+    if (_index == 1) {
       await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
           builder: (_) => const IdeaEditorScreen(),
@@ -37,7 +40,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       return;
     }
 
-    if (_index == 1) {
+    if (_index == 2) {
       await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
           builder: (_) => const TimelineEventEditorScreen(),
@@ -47,7 +50,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       return;
     }
 
-    if (_index == 2) {
+    if (_index == 3) {
       final repo = ref.read(repositoryProvider);
       if (repo is NoopRepository) {
         if (!mounted) return;
@@ -108,6 +111,20 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
   @override
   Widget build(BuildContext context) {
     final hasRemote = ref.watch(hasRemoteProvider);
+    final unreadAsync = ref.watch(jbcUnreadNotificationCountProvider);
+    final unreadCount = unreadAsync.when(
+      data: (n) => n,
+      error: (_, _) => 0,
+      loading: () => 0,
+    );
+
+    ref.listen(userProfileProvider, (previous, next) {
+      if (next == null || !ref.read(hasRemoteProvider)) return;
+      Future.microtask(() => JbcFirebaseBootstrap.registerMessagingTokenIfPossible(
+            repository: ref.read(repositoryProvider),
+            profile: next,
+          ));
+    });
 
     return Scaffold(
       appBar: AppBar(
@@ -122,16 +139,25 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
         ),
         title: Text(_titles[_index]),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const SettingsScreen(),
+          if (hasRemote)
+            IconButton(
+              tooltip: 'Notificações',
+              onPressed: () {
+                Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const NotificationsScreen(),
+                  ),
+                );
+              },
+              icon: Badge(
+                isLabelVisible: unreadCount > 0,
+                label: Text(
+                  unreadCount > 99 ? '99+' : '$unreadCount',
+                  style: const TextStyle(fontSize: 10),
                 ),
-              );
-            },
-          ),
+                child: const Icon(Icons.notifications_outlined),
+              ),
+            ),
         ],
       ),
       body: Column(
@@ -157,6 +183,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
             child: IndexedStack(
               index: _index,
               children: const [
+                JbcHubScreen(),
                 IdeasScreen(),
                 TimelineScreen(),
                 HangoutsScreen(),
@@ -165,21 +192,28 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _onFab,
-        tooltip: _index == 0
-            ? 'Nova ideia'
-            : _index == 1
-                ? 'Nova memória'
-                : _index == 2
-                    ? 'Novo rolê ou indisponibilidade'
-                    : 'Adicionar',
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: _index == 0
+          ? null
+          : FloatingActionButton(
+              onPressed: _onFab,
+              tooltip: _index == 1
+                  ? 'Nova ideia'
+                  : _index == 2
+                      ? 'Nova memória'
+                      : _index == 3
+                          ? 'Novo rolê ou indisponibilidade'
+                          : 'Adicionar',
+              child: const Icon(Icons.add),
+            ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.auto_awesome_mosaic_outlined),
+            selectedIcon: Icon(Icons.auto_awesome_mosaic),
+            label: 'Central',
+          ),
           NavigationDestination(
             icon: Icon(Icons.lightbulb_outline),
             selectedIcon: Icon(Icons.lightbulb),
@@ -202,6 +236,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
 }
 
 const _titles = <String>[
+  'Central JBC',
   'Cantinho de Ideias',
   'Linha do Tempo',
   'Rolês',

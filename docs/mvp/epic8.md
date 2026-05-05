@@ -32,7 +32,7 @@ Corrigir a leitura visual da timeline quando há **foto de capa**: hoje há sens
 
 ## Entregue (implementação)
 
-- **`docs/epic8.md`** + **`pubspec.yaml`**: dependência **`google_fonts`**.
+- **`docs/mvp/epic8.md`** + **`pubspec.yaml`**: dependência **`google_fonts`**.
 - **`timeline_screen.dart`**: polaroid inclinada; **sem imagem** = sem slot 4:3 (só papel + título/data); **descrição** só no detalhe — na lista, ícone `notes` + `celebration` discretos na legenda quando há texto / rolê; **`Stack` da linha**: haste + nó **antes** do `Row` para os cartões cobrirem a haste.
 - **`timeline_theme.dart`**: paddings da polaroid ligeiramente menores; constante **`timelinePolaroidImageBoost`**.
 
